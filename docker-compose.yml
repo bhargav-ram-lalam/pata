@@ -1,0 +1,107 @@
+version: "3.8"
+
+# ============================================================================
+# Production topology: Pata API + PostgreSQL + Redis
+# Local-dev fallback: set PATA_DATABASE_URL=sqlite:///./pata.db and omit
+#   PATA_REDIS_URL (rate-limiter/cache/circuit-breaker fall back to in-memory)
+# ============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — primary persistence store (production)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: pata-postgres
+    environment:
+      POSTGRES_DB: pata
+      POSTGRES_USER: pata_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pata_pass}
+    volumes:
+      - pata-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pata_app -d pata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Redis — distributed rate limiter, Overpass cache, circuit-breaker state
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: pata-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - pata-redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Pata API — horizontally scalable application layer
+  # ---------------------------------------------------------------------------
+  pata-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pata-api-service
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Auth
+      - PATA_API_KEYS=${PATA_API_KEYS:-pata_dev_key,test_api_key_stage3}
+      # Persistence (Postgres in production; switch to sqlite for local dev)
+      - PATA_DATABASE_URL=${PATA_DATABASE_URL:-postgresql+psycopg2://pata_app:pata_pass@postgres:5432/pata}
+      # Redis (distributed rate limiter / cache / circuit-breaker)
+      - PATA_REDIS_URL=${PATA_REDIS_URL:-redis://redis:6379/0}
+      # Data retention
+      - PATA_PURGE_INTERVAL_SEC=${PATA_PURGE_INTERVAL_SEC:-3600}
+      # Pipeline
+      - PATA_REQUEST_TIMEOUT_SEC=${PATA_REQUEST_TIMEOUT_SEC:-5.0}
+      - PATA_HIGH_CONF=${PATA_HIGH_CONF:-0.80}
+      - PATA_MEDIUM_CONF=${PATA_MEDIUM_CONF:-0.50}
+      # LLM
+      - PATA_LLM_PROVIDER=${PATA_LLM_PROVIDER:-anthropic}
+      - PATA_LLM_MODEL=${PATA_LLM_MODEL:-claude-haiku-4-5}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Overpass
+      - PATA_OVERPASS_URL=${PATA_OVERPASS_URL:-https://overpass-api.de/api/interpreter}
+      - PATA_OVERPASS_CB_THRESHOLD=${PATA_OVERPASS_CB_THRESHOLD:-3}
+      - PATA_OVERPASS_CB_COOLDOWN_SEC=${PATA_OVERPASS_CB_COOLDOWN_SEC:-60.0}
+      # CORS
+      - PATA_CORS_ORIGINS=${PATA_CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      # Webhook (review loop → e-commerce backend integration)
+      - PATA_WEBHOOK_URL=${PATA_WEBHOOK_URL:-}
+      - PATA_WEBHOOK_SECRET=${PATA_WEBHOOK_SECRET:-changeme_in_production}
+    volumes:
+      - pata-cache:/home/patauser/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  pata-pgdata:
+  pata-redisdata:
+  pata-cache:

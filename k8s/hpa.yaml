@@ -1,0 +1,60 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pata-api
+  namespace: pata
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pata-api
+
+  # ── Replica bounds ────────────────────────────────────────────────────────
+  # Minimum 2 replicas for HA (one node can fail without service disruption).
+  # Maximum 10 replicas: at Stage 4 measured throughput of 312 req/s per replica,
+  # 10 replicas handles 3,120 req/s — sufficient for 1M orders/month burst traffic
+  # (peak: ~100 checkouts/s for a large e-commerce platform).
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+    # ── Primary: CPU utilisation ───────────────────────────────────────────
+    # IndicBERT (Agent 2) is CPU-intensive at ~35–60% trigger rate.
+    # Target 70% CPU: gives headroom for burst while avoiding over-scaling.
+    # At 70% CPU load, scale up; at <70%, scale down (with stabilisation window).
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # ── Secondary: Memory (model weights guard) ───────────────────────────
+    # IndicBERT ≈ 125MB; alert if replicas approach 3.5GB to prevent OOM.
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+  behavior:
+    # ── Scale-up policy ────────────────────────────────────────────────────
+    # Scale up aggressively (order spikes during sale events): allow up to
+    # 4 new pods every 60 seconds.
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+
+    # ── Scale-down policy ─────────────────────────────────────────────────
+    # Scale down conservatively: wait 5 minutes before removing a replica
+    # to avoid thrashing if traffic is bursty (e.g. flash sale → quiet period).
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

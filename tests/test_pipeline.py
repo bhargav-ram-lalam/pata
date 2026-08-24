@@ -256,8 +256,8 @@ class CaseResult:
 def run_case(tc: AddressTestCase) -> CaseResult:
     """Run a single test case through the pipeline."""
     t0 = time.perf_counter()
-    # Skip OSM in automated tests to avoid hitting Overpass API
-    resolution = resolve_address(tc.raw, skip_osm=True)
+    # Skip OSM and use mock LLM in automated tests to avoid remote network/billing dependencies
+    resolution = resolve_address(tc.raw, skip_osm=True, llm_provider="mock")
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     failures: list[str] = []

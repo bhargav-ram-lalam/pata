@@ -27,7 +27,7 @@ import logging
 import time
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from agents.agent1_parser import DeterministicParserAgent
 from agents.agent2_ner    import LandmarkNERAgent, get_ner_agent
@@ -71,9 +71,7 @@ class AddressResolution(BaseModel):
     timestamp:     str
     ttl_for_raw_retention: str
 
-    class Config:
-        # Pydantic v2
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +110,18 @@ def _init_agents(
         _agent5 = SelfCheckAgent()
 
 
+def preload_models() -> None:
+    """
+    Preload models into memory during application startup (FastAPI lifespan)
+    to eliminate first-request cold start penalty.
+    """
+    logger.info("Preloading Pata foundation models...")
+    _init_agents()
+    if _agent2 is not None:
+        _agent2._ensure_model_loaded()
+    logger.info("Foundation models successfully preloaded into memory.")
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -123,6 +133,9 @@ def resolve_address(
     llm_provider: str = "anthropic",
     llm_model: str = "claude-haiku-4-5",
     skip_osm: bool = False,
+    request_id: Optional[str] = None,
+    hint_lat: Optional[float] = None,
+    hint_lng: Optional[float] = None,
 ) -> AddressResolution:
     """
     Resolve a raw Indian address string into a structured AddressResolution.
@@ -134,12 +147,21 @@ def resolve_address(
     llm_provider:             "anthropic" | "openai" | "google" (for Agent 4).
     llm_model:                Model name within the chosen provider.
     skip_osm:                 If True, skip Agent 3 (useful for unit tests).
+    request_id:               UUID correlation ID for request tracing.
+    hint_lat, hint_lng:       Optional user/device GPS hint coordinates.
 
     Returns
     -------
     AddressResolution (Pydantic model, JSON-serialisable)
     """
     pipeline_start = time.perf_counter()
+    if request_id:
+        try:
+            from observability.logger import request_id_var
+            request_id_var.set(request_id)
+        except Exception:
+            pass
+
     _init_agents(ner_confidence_threshold, llm_provider, llm_model)
 
     trace: list[dict] = []
@@ -259,6 +281,7 @@ def resolve_address(
     # ==================================================================
     evidence = {
         "raw_address_preserved": True,
+        "request_id": request_id,
         "agent1_digipin_from_parse": a1_result.digipin,
         "agent1_source": "bharataddress_deterministic_parser",
         "agent1_confidence": a1_result.raw_confidence,
@@ -283,6 +306,13 @@ def resolve_address(
         ),
     }
 
+    if hint_lat is not None and hint_lng is not None:
+        evidence["hint_coordinates"] = {"latitude": hint_lat, "longitude": hint_lng}
+
+    if request_id:
+        for t in trace:
+            t["request_id"] = request_id
+
     total_ms = (time.perf_counter() - pipeline_start) * 1000
     total_cost = sum(t.get("approximate_cost_usd", 0.0) for t in trace)
     logger.info(
@@ -290,7 +320,7 @@ def resolve_address(
         total_ms, final_conf, needs_review, total_cost,
     )
 
-    return AddressResolution(
+    resolution = AddressResolution(
         raw_address          = raw_address,
         parsed               = merged,
         digipin              = digipin,
@@ -303,3 +333,11 @@ def resolve_address(
         timestamp            = now_utc.isoformat(),
         ttl_for_raw_retention = ttl_utc.isoformat(),
     )
+
+    try:
+        from observability.metrics import record_request_metrics
+        record_request_metrics(resolution)
+    except Exception:
+        pass
+
+    return resolution

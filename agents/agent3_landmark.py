@@ -197,59 +197,25 @@ class LandmarkResolutionAgent:
         radius_m: int,
     ) -> list[OSMCandidate]:
         """
-        Build an Overpass QL query and return matching POIs.
-        We search for nodes/ways with a 'name' tag within the radius circle.
+        Query Overpass with caching, exponential backoff, and circuit breaker protection.
         """
-        # Build a union query for various POI types
-        # Simple approach: fetch all named elements within radius, then match client-side
-        query = f"""
-[out:json][timeout:10];
-(
-  node["name"](around:{radius_m},{lat},{lon});
-  way["name"](around:{radius_m},{lat},{lon});
-);
-out center 100;
-"""
-        encoded = urllib.parse.urlencode({"data": query}).encode()
-        req = urllib.request.Request(
-            OVERPASS_URL,
-            data=encoded,
-            headers={"User-Agent": "Pata-AddressResolver/1.0 (contact@pata.ai)"},
-        )
         try:
-            with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
-                data = json.loads(resp.read().decode())
+            from resilience.overpass_client import query_overpass_with_resilience
+            raw_candidates = query_overpass_with_resilience(landmark, lat, lon, radius_m)
+            return [
+                OSMCandidate(
+                    osm_id=c["osm_id"],
+                    osm_type=c["osm_type"],
+                    name=c["name"],
+                    lat=c["lat"],
+                    lon=c["lon"],
+                )
+                for c in raw_candidates
+            ]
         except Exception as exc:
-            raise RuntimeError(f"Overpass HTTP error: {exc}") from exc
+            logger.warning("Resilient Overpass query failed: %s", exc)
+            return []
 
-        candidates: list[OSMCandidate] = []
-        for element in data.get("elements", []):
-            tags = element.get("tags", {})
-            name = tags.get("name", "").strip()
-            if not name:
-                continue
-
-            # Coordinate: nodes have lat/lon; ways have center
-            if element["type"] == "node":
-                elat = element.get("lat")
-                elon = element.get("lon")
-            else:
-                center = element.get("center", {})
-                elat = center.get("lat")
-                elon = center.get("lon")
-
-            if elat is None or elon is None:
-                continue
-
-            candidates.append(OSMCandidate(
-                osm_id   = element.get("id", 0),
-                osm_type = element["type"],
-                name     = name,
-                lat      = float(elat),
-                lon      = float(elon),
-            ))
-
-        return candidates
 
     @staticmethod
     def _best_match(query: str, candidates: list[OSMCandidate]) -> OSMCandidate | None:

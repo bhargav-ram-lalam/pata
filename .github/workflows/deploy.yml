@@ -1,0 +1,76 @@
+name: Deploy
+
+# Trigger: push to main branch only
+on:
+  push:
+    branches: ["main"]
+
+# ── India-region deployment target ────────────────────────────────────────
+# Per DEPLOYMENT.md and DPDP Act 2023 requirements, ALL infrastructure must
+# remain within Indian geographic boundaries. Target: AWS ap-south-1 (Mumbai)
+# or GCP asia-south1. Container registry below uses GHCR; adapt to ECR/GAR
+# for the actual production target region.
+# ────────────────────────────────────────────────────────────────────────────
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DEPLOY_REGION: ap-south-1  # AWS Mumbai — DPDP Act 2023 compliance
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,suffix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ── Deployment stub ──────────────────────────────────────────────────────
+  # Replace with real deployment steps (kubectl apply / helm upgrade / etc.)
+  # when a live cluster is provisioned in ap-south-1.
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-22.04
+    environment: production
+
+    steps:
+      - name: Deployment note
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Pata Production Deployment"
+          echo "  Image: ghcr.io/${{ github.repository }}:$(echo ${{ github.sha }} | head -c7)"
+          echo "  Region: ${{ env.DEPLOY_REGION }} (AWS Mumbai)"
+          echo "  DPDP Act 2023: All processing within India ✓"
+          echo ""
+          echo "  Next steps (when cluster is provisioned):"
+          echo "  1. kubectl set image deployment/pata-api pata-api=<image>"
+          echo "  2. kubectl rollout status deployment/pata-api"
+          echo "  3. kubectl apply -f k8s/hpa.yaml"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

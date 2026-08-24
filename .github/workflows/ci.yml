@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+
+    # ── Service containers: Postgres + Redis (matches production topology) ─────
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: pata_test
+          POSTGRES_USER: pata_app
+          POSTGRES_PASSWORD: pata_test_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pata_app -d pata_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      # Point tests at the service containers, not SQLite/in-memory
+      PATA_DATABASE_URL: postgresql+psycopg2://pata_app:pata_test_pass@localhost:5432/pata_test
+      PATA_REDIS_URL: redis://localhost:6379/0
+      PATA_API_KEYS: pata_dev_key,test_api_key_stage3
+      PATA_LLM_PROVIDER: anthropic
+      # Use placeholder key — LLM calls are mocked in tests
+      ANTHROPIC_API_KEY: sk-placeholder-ci
+      PATA_RATE_LIMIT_RPS: "100.0"
+      PATA_RATE_LIMIT_BURST: "200.0"
+      PATA_REQUEST_TIMEOUT_SEC: "10.0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir -r requirements.txt
+
+      - name: Lint — ruff
+        run: |
+          pip install ruff
+          ruff check . --select E,F,W,I --ignore E501,W503
+
+      - name: Run Alembic migrations
+        run: |
+          alembic upgrade head
+
+      - name: Run API integration tests
+        run: pytest tests/test_api.py -v --tb=short
+
+      - name: Run resilience tests
+        run: pytest tests/test_resilience.py -v --tb=short
+
+      - name: Run pipeline tests
+        run: pytest tests/test_pipeline.py -v --tb=short
+
+      - name: Run review loop tests
+        run: pytest tests/test_review.py -v --tb=short
+
+      - name: Build Docker image
+        run: docker build -t pata-api:ci .
+
+      # Foundation regression: validate core library availability
+      - name: Validate bharataddress library
+        run: python scripts/validate_bharataddress.py --quick
+        continue-on-error: true  # Non-blocking; library may update independently

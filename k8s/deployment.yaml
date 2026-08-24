@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pata-api
+  namespace: pata
+  labels:
+    app: pata-api
+    version: "0.4.0"
+spec:
+  # Horizontal scaling: HPA manages replica count (see hpa.yaml)
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pata-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero-downtime rolling updates
+  template:
+    metadata:
+      labels:
+        app: pata-api
+        version: "0.4.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/v1/metrics"
+    spec:
+      # ── Security context ─────────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+
+      containers:
+        - name: pata-api
+          image: ghcr.io/bhargav-ram-lalam/pata:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+
+          # ── Resource allocation ───────────────────────────────────────────
+          # Based on Stage 4 load test: P99 latency 1,450ms at 100 concurrent
+          # IndicBERT model weights ≈125MB; Overpass Redis cache offloads RAM
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+
+          # ── Environment: secrets from Kubernetes Secret ───────────────────
+          envFrom:
+            - secretRef:
+                name: pata-secrets  # Contains: PATA_DATABASE_URL, PATA_REDIS_URL, ANTHROPIC_API_KEY, etc.
+          env:
+            - name: PATA_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: pata-secrets
+                  key: PATA_API_KEYS
+            - name: PATA_PURGE_INTERVAL_SEC
+              value: "0"  # Disable in-process purge worker in multi-replica mode
+              # Use the dedicated CronJob in DEPLOYMENT.md instead
+            - name: PATA_HIGH_CONF
+              value: "0.80"
+            - name: PATA_MEDIUM_CONF
+              value: "0.50"
+            - name: PATA_LLM_PROVIDER
+              value: "anthropic"
+            - name: PATA_REQUEST_TIMEOUT_SEC
+              value: "5.0"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+          # ── Health probes ─────────────────────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /v1/health/live
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /v1/health/ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Model cache volume (IndicBERT weights) ────────────────────────
+          volumeMounts:
+            - name: model-cache
+              mountPath: /home/patauser/.cache
+
+      volumes:
+        - name: model-cache
+          emptyDir:
+            medium: Memory  # Keep model weights in tmpfs for sub-ms access
+            sizeLimit: "512Mi"
+
+      # ── Topology spread for high availability ─────────────────────────────
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: pata-api
