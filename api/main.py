@@ -40,7 +40,10 @@ logger = get_logger("pata.api")
 # Configuration from environment
 REQUEST_TIMEOUT_SEC = float(os.getenv("PATA_REQUEST_TIMEOUT_SEC", "5.0"))
 MAX_BATCH_CONCURRENCY = int(os.getenv("PATA_MAX_BATCH_CONCURRENCY", "10"))
-CORS_ORIGINS_ENV = os.getenv("PATA_CORS_ORIGINS", "http://localhost:3000,http://localhost:8000")
+CORS_ORIGINS_ENV = os.getenv(
+    "PATA_CORS_ORIGINS",
+    "http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:8000"
+)
 ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_ENV.split(",") if origin.strip()]
 
 _is_ready = False

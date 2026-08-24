@@ -73,7 +73,7 @@ Under the **Digital Personal Data Protection Act (DPDP Act 2023)**, address stri
 | `PATA_RATE_LIMIT_BURST` | `40.0` | Maximum bucket capacity per API key |
 | `PATA_WEBHOOK_URL` | *(None)* | URL for correction webhook POST notifications |
 | `PATA_WEBHOOK_SECRET` | `changeme_in_production` | HMAC-SHA256 shared secret for webhook signatures |
-| `PATA_CORS_ORIGINS` | `http://localhost:3000,...` | Allowed CORS origins |
+| `PATA_CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:8000` | Allowed CORS origins for Playgrounds, Dashboards, and Partner Checkouts |
 
 ### Local Dev Fallback (SQLite-only, no Redis)
 

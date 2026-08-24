@@ -4,6 +4,34 @@ All notable changes to the Pata codebase are documented in this file.
 
 ---
 
+## [0.5.0] — Stage 5: Frontend Surfaces (August 2026)
+
+### Added
+
+**Part A — Surface 1: Resolution Playground (`frontend/playground/`)**
+- **Single interactive resolution input** with GPS hint support (`hint_lat`, `hint_lng`).
+- **Live Multi-Agent Pipeline Trace visualizer**: progressive staged reveal driven by `pipeline_trace` per-agent latencies for Agents 1–5.
+- **Leaflet OpenStreetMap visualizer**: primary geocoded marker, secondary OSM landmark POI marker (from Agent 3), and connecting dashed line.
+- **Interactive Medium-Tier Verification UX**: draggable map pin and "Confirm / Update Location" action calling `POST /v1/review/{id}/confirm` and `/resolve`.
+- **Prominent Confidence Tier banners**: HIGH (green auto-confirmed), MEDIUM (amber pin verification enabled), LOW (red flagged for ops review).
+- **Standardized Address Hierarchy card**: structured key-value grid for building, landmark, road, locality, city, district, state, pincode.
+- **DIGIPIN Digital Postal Code card**: copy-to-clipboard, grid breakdown, and India Post / IIT Hyderabad factual explanation tooltip.
+- **Audit & Evidence card**: session-only memory display with DPDP 2023 24h retention deadline and JSON inspection.
+- **One-click Benchmark Addresses carousel**: 6 preloaded gold Indian addresses from `tests/test_pipeline.py` spanning HIGH, MEDIUM, and LOW tiers.
+
+**Part B — Surface 2: Ops Review Dashboard (`frontend/review-dashboard/`)**
+- **Login Gate**: session-only API Key authentication (stored in memory/session only, matching DPDP Act guardrails).
+- **Telemetry Stats Header**: live metrics scraped from Prometheus (`pata_review_queue_size`, `pata_reviews_completed_total` confirmed/corrected counts, and `pata_review_turnaround_seconds` SLA averages).
+- **Review Queue Table**: paginated, searchable, sortable by lowest-confidence first or timestamp, with reason badges and age indicators.
+- **Review Detail & Action Drawer**: Leaflet map with draggable coordinate pin, editable structured fields, reviewer ID/notes inputs, and instant Confirm / Submit Correction action handlers.
+
+**Part C — Shared Infrastructure & Polish**
+- Dual Vite + React 19 + TypeScript + Tailwind CSS dark-mode logistics theme.
+- Configured default CORS allowlist in `api/main.py`, `.env.example`, and `DEPLOYMENT.md` for ports 5173, 5174, 3000, and 8000.
+- Comprehensive error handling for 401 Unauthorized, 429 Rate Limit retry-after headers, and 500/network fallbacks.
+
+---
+
 ## [0.4.0] — Stage 4: Scale-Out, Human-Review Loop & E-Commerce Integration (August 2026)
 
 ### Added

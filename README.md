@@ -2,106 +2,119 @@
 
 [![CI](https://github.com/bhargav-ram-lalam/pata/actions/workflows/ci.yml/badge.svg)](https://github.com/bhargav-ram-lalam/pata/actions/workflows/ci.yml)
 
-> **Status: Stage 4 — Scale-Out, Human-Review Loop & E-Commerce Integration**
+> **Status: Stage 5 — Full-Stack (AI Engine + Playground + Ops Review Dashboard)**
 
 Pata is an AI-powered address resolution and standardization engine engineered specifically for the complexities of Indian last-mile logistics. Indian addresses are notorious for being unstructured, landmark-centric (e.g., *"behind Hanuman Mandir, opposite yellow water tank"*), colloquial, and frequently plagued by mismatched pincodes, missing house numbers, and mixed-script transliterations. Standard Western geocoders fail on these patterns. Pata combines deterministic postal parsing, fine-grained Named Entity Recognition (NER), spatial landmark validation, and confidence arbitration to resolve messy input into verified, deliverable coordinates and DIGIPIN codes.
 
-**Stage 4** adds horizontal scalability (Redis-backed rate limiter, cache, circuit breaker; Postgres via Alembic), closes the human-review feedback loop, proves the e-commerce checkout integration end-to-end, and adds CI/CD + Kubernetes autoscaling manifests.
+---
+
+## Stage 5 Frontend Surfaces
+
+| Surface | Path | Port | Purpose |
+|---|---|---|---|
+| **Resolution Playground** | `frontend/playground/` | `http://localhost:5173` | Live interactive resolution demo: multi-agent live trace reveal, Leaflet OSM map with landmark connecting lines, DIGIPIN decoder, confidence badges, and one-click benchmark Indian addresses. |
+| **Ops Review Dashboard** | `frontend/review-dashboard/` | `http://localhost:5174` | Operator feedback loop: Prometheus telemetry stats header, paginated review queue, draggable map pin repositioning, structured field editing, and instant confirm/correct submission (firing signed webhooks). |
 
 ---
 
-## Quick Start (Stage 4)
+## Quick Start (Full Stack Demo)
+
+### 1. Start Backend & Distributed State
 
 ```bash
-# Full stack: Postgres + Redis + Pata API
+# Option A: Full Production Stack (Postgres + Redis + Pata API)
 docker-compose up -d --build
 alembic upgrade head
 
-# Or local SQLite dev (no Redis/Postgres required)
+# Option B: Local SQLite Dev (no external services needed)
 uvicorn api.main:app --port 8000
-
-# Run e-commerce checkout demo
-python examples/checkout_integration/simulate_checkout.py
-
-# Run all tests
-pytest tests/ -v
 ```
 
-### Key Endpoints
+### 2. Launch Frontend Applications
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /v1/resolve` | Resolve single address at checkout |
-| `GET /v1/review/queue` | Human review backlog (pending_review) |
-| `POST /v1/review/{id}/confirm` | Confirm ML result was correct |
-| `POST /v1/review/{id}/resolve` | Submit correction → fires signed webhook |
-| `GET /v1/metrics` | Prometheus metrics (incl. review loop) |
+```bash
+# Launch Resolution Playground (Terminal 1)
+cd frontend/playground
+npm install
+npm run dev
 
-See [docs/integration_guide.md](docs/integration_guide.md) for e-commerce partner integration details.
+# Launch Ops Review Dashboard (Terminal 2)
+cd frontend/review-dashboard
+npm install
+npm run dev
+```
+
+Visit **`http://localhost:5173`** for the Resolution Playground and **`http://localhost:5174`** for the Ops Review Dashboard.
 
 ---
 
+## API Endpoints Reference
 
-## Setup & Reproduction
+| Endpoint | Method | Auth | Description |
+|---|---|---|---|
+| `/v1/resolve` | `POST` | `X-API-Key` | Resolve single address at checkout |
+| `/v1/resolve/batch` | `POST` | `X-API-Key` | Batch resolve up to 100 addresses |
+| `/v1/review/queue` | `GET` | `X-API-Key` | Paginated review backlog for human verification |
+| `/v1/review/{id}/confirm` | `POST` | `X-API-Key` | Mark ML result as confirmed correct |
+| `/v1/review/{id}/resolve` | `POST` | `X-API-Key` | Submit human correction (fires HMAC webhook) |
+| `/v1/metrics` | `GET` | None | Prometheus telemetry metrics |
+| `/v1/health/live` | `GET` | None | Container liveness probe |
+| `/v1/health/ready` | `GET` | None | Subsystem & model readiness probe |
 
-### Prerequisites
-- Python ≥ 3.10 (tested on Python 3.13)
-- Internet access for initial model weights download (~400MB) and pincode directory validation.
-
-### 1. Create and Activate Virtual Environment
-
-**On Windows (PowerShell):**
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-**On Linux / macOS (Bash):**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 2. Install Dependencies
-
-Install the core package in editable mode along with optional extras (`indic` transliteration and `fuzzy` matching):
-```bash
-pip install -e ".[indic,fuzzy,dev]"
-```
-
-Or directly via `requirements.txt`:
-```bash
-pip install -r requirements.txt
-```
+See [docs/integration_guide.md](docs/integration_guide.md) for e-commerce checkout integration details.
 
 ---
 
-## Cache Directories Note
+## Architecture & Multi-Agent Pipeline
 
-The underlying libraries store persistent datasets outside the repository workspace in user home directories:
-- **`bharataddress` Cache**: `~/.cache/bharataddress/` stores the India Post pincode directory (~154,000+ records) and offline centroids.
-- **Hugging Face Cache**: `~/.cache/huggingface/hub/` stores the IndicBERT model weights, tokenizer vocabularies, and config files for `shiprocket-ai/open-indicbert-indian-address-ner`.
-
-These external directories are managed automatically by their respective libraries and should not be checked into Git.
-
----
-
-## Running Foundation Validation
-
-### Validate `bharataddress`
-Executes test cases across all modules (`parse`, `pincode.lookup`, `digipin`, `format`, `validate`, `is_deliverable`, `phonetic`, `geocode`, `address_similarity`, `parse_batch`, and 50-run latency benchmark):
-```bash
-python scripts/validate_bharataddress.py
 ```
-
-### Validate IndicBERT NER
-Loads the model, inspects `id2label` token schema, runs inference on benchmark addresses, evaluates landmark capture on informal cue patterns, and logs cold-load + inference latency:
-```bash
-python scripts/validate_indicbert.py
+[Raw Address Input]
+       │
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Agent 1: Deterministic Postal Parser (BharatAddress)     │  ~0.2ms
+└──────┬───────────────────────────────────────────────────┘
+       │ (if landmark cues or low confidence detected)
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Agent 2: IndicBERT Address NER (Shiprocket IndicBERT)    │  ~40ms
+└──────┬───────────────────────────────────────────────────┘
+       │ (spatial landmark candidate lookup)
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Agent 3: OSM Overpass Spatial Resolution + Redis Cache   │  ~300ms
+└──────┬───────────────────────────────────────────────────┘
+       │ (confidence tier arbitration)
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Agent 4: Confidence Arbitration & LLM Fallback (Haiku)   │  <1ms / 400ms
+└──────┬───────────────────────────────────────────────────┘
+       │ (quality audit & DPDP Act compliance)
+       ▼
+┌──────────────────────────────────────────────────────────┐
+│ Agent 5: Self-Check Quality & Verification Audit         │  ~2ms
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Stage 1 Deliverables & Documentation
+## Running Test Suites
 
-- Comprehensive findings, latency benchmarks, and side-by-side field extraction comparison matrix: [docs/foundation_validation.md](docs/foundation_validation.md)
+```bash
+# Run all API and resilience tests
+pytest tests/test_api.py tests/test_resilience.py -v
+
+# Run human-review loop tests
+pytest tests/test_review.py -v
+
+# Run pipeline gold test suite
+pytest tests/test_pipeline.py -v
+```
+
+---
+
+## Regulatory Compliance: India DPDP Act 2023
+
+1. **Mandatory Regional Placement:** All processing infrastructure must be deployed in Indian data regions (e.g. AWS `ap-south-1` Mumbai).
+2. **Zero Raw PII Retention:** Long-term database tables contain only structured coordinates, DIGIPIN, and anonymized audit metadata.
+3. **Automated 24h Purge Worker:** Short-lived raw address staging records are deleted automatically after 24 hours.

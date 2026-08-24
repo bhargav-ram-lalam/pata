@@ -51,6 +51,12 @@ models/
 *.log
 .DS_Store
 
+# Node / Frontend build artifacts
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
 # SQLite local dev database (never commit — Postgres in production)
 pata.db
 pata.db-shm
