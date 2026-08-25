@@ -111,9 +111,6 @@ export function App() {
                 <span className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
                   Pata <span className="text-brand-600 dark:text-brand-400">Ops Review</span>
                 </span>
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20">
-                  Stage 5
-                </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
                 Human-Review & Feedback Loop Dashboard
@@ -220,7 +217,7 @@ export function App() {
       <footer className="border-t border-slate-200 dark:border-slate-900 bg-white dark:bg-slate-950 py-6 mt-12 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-700 dark:text-slate-400">Pata (पता) Ops</span>
+            <span className="font-bold text-slate-700 dark:text-slate-400">Pata Ops</span>
             <span>—</span>
             <span>Human-in-the-Loop Arbitration & Correction Training Logger</span>
           </div>

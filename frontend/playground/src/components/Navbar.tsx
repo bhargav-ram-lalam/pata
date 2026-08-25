@@ -44,10 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onApiKeyChange }) => {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
-                Pata <span className="text-brand-600 dark:text-brand-400 font-medium">(पता)</span>
-              </span>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                v0.4.0 Live
+                Pata
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium hidden sm:block">

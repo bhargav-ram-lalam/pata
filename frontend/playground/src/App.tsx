@@ -176,7 +176,7 @@ export function App() {
       <footer className="border-t border-slate-200 dark:border-slate-900 bg-white dark:bg-slate-950 py-6 mt-12 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-700 dark:text-slate-400">Pata (पता)</span>
+            <span className="font-bold text-slate-700 dark:text-slate-400">Pata</span>
             <span>—</span>
             <span>AI Address Resolution Engine for India</span>
           </div>
