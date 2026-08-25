@@ -52,6 +52,8 @@ class AddressResolution(BaseModel):
     digipin:             10-character India Post geocode (if coord available).
     latitude, longitude: Final arbitrated coordinate.
     confidence:          Final confidence score (0–1) from Agent 4.
+    anchor_type:         Geographic anchor source: 'landmark' | 'pincode_centroid' | 'osm_geocode' | 'unresolved'.
+    accuracy_radius_meters: Estimated spatial accuracy radius in meters (~150m for landmark, ~2000m for pincode area).
     needs_human_review:  True if confidence is below threshold or checks failed.
     evidence:            Audit trail: which agent produced what.
     pipeline_trace:      Per-agent latency_ms + approximate cost (for reporting).
@@ -65,6 +67,8 @@ class AddressResolution(BaseModel):
     latitude:      Optional[float] = None
     longitude:     Optional[float] = None
     confidence:    float          = Field(ge=0.0, le=1.0)
+    anchor_type:   Optional[str]  = None
+    accuracy_radius_meters: Optional[int] = None
     needs_human_review: bool
     evidence:      dict
     pipeline_trace: list[dict]
@@ -301,10 +305,31 @@ def resolve_address(
         "combined_confidence": final_conf,
         "coordinate_source": (
             "agent3_osm_poi" if (a3_result.triggered and a3_result.matched_poi
-                                 and a3_result.match_score >= 0.65)
+                                 and (a3_result.match_score or 0) >= 0.65)
             else "agent1_pincode_centroid"
         ),
     }
+
+    # Derive anchor_type and estimated accuracy_radius_meters
+    # Estimates:
+    # - Landmark match (A3): high precision (~150m radius)
+    # - Pincode centroid (A1): area estimate (~2000m radius)
+    # - Unresolved: None
+    if final_lat is None or final_lon is None:
+        anchor_type = "unresolved"
+        accuracy_radius_meters = None
+    elif a3_result.triggered and a3_result.matched_poi and (a3_result.match_score or 0) >= 0.65:
+        anchor_type = "landmark"
+        accuracy_radius_meters = 150
+    elif final_lat is not None and final_lon is not None:
+        anchor_type = "pincode_centroid"
+        accuracy_radius_meters = 2000
+    else:
+        anchor_type = "unresolved"
+        accuracy_radius_meters = None
+
+    evidence["anchor_type"] = anchor_type
+    evidence["accuracy_radius_meters"] = accuracy_radius_meters
 
     if hint_lat is not None and hint_lng is not None:
         evidence["hint_coordinates"] = {"latitude": hint_lat, "longitude": hint_lng}
@@ -327,6 +352,8 @@ def resolve_address(
         latitude             = final_lat,
         longitude            = final_lon,
         confidence           = final_conf,
+        anchor_type          = anchor_type,
+        accuracy_radius_meters = accuracy_radius_meters,
         needs_human_review   = needs_review,
         evidence             = evidence,
         pipeline_trace       = trace,

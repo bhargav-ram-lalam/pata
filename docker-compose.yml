@@ -53,7 +53,7 @@ services:
   # ---------------------------------------------------------------------------
   pata-api:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: pata-api-service
     ports:

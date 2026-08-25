@@ -269,14 +269,14 @@ pytest tests/test_api.py -v
 pytest tests/test_resilience.py -v
 
 # Run review loop tests
-pytest tests/test_review.py -v
+cd backend && pytest tests/test_review.py -v
 
 # Run local API service
-uvicorn api.main:app --port 8000
+cd backend && uvicorn api.main:app --port 8000
 
 # Run e-commerce checkout demo
-python examples/checkout_integration/simulate_checkout.py
+python backend/examples/checkout_integration/simulate_checkout.py
 
 # Export corrections dataset
-python scripts/export_corrections.py --output corrections.jsonl
+python backend/scripts/export_corrections.py --output corrections.jsonl
 ```

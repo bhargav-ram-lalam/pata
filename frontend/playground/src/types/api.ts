@@ -32,6 +32,8 @@ export interface AddressResolution {
   latitude: number | null;
   longitude: number | null;
   confidence: number;
+  anchor_type?: 'landmark' | 'pincode_centroid' | 'osm_geocode' | 'unresolved' | string | null;
+  accuracy_radius_meters?: number | null;
   needs_human_review: boolean;
   evidence: {
     agent4_tier?: 'high' | 'medium' | 'low' | string;

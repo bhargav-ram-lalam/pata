@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: backend
 
     # ── Service containers: Postgres + Redis (matches production topology) ─────
     services:
@@ -59,6 +62,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
         run: pip install --no-cache-dir -r requirements.txt
@@ -91,3 +95,152 @@ jobs:
       - name: Validate bharataddress library
         run: python scripts/validate_bharataddress.py --quick
         continue-on-error: true  # Non-blocking; library may update independently
+
+  # ── End-to-End (Playwright) — proves full frontend + backend journey ──────
+  e2e:
+    runs-on: ubuntu-22.04
+    needs: [test]
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: pata_e2e
+          POSTGRES_USER: pata_app
+          POSTGRES_PASSWORD: pata_e2e_pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pata_app -d pata_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    env:
+      PATA_DATABASE_URL: postgresql+psycopg2://pata_app:pata_e2e_pass@localhost:5432/pata_e2e
+      PATA_REDIS_URL: redis://localhost:6379/0
+      PATA_API_KEYS: pata_dev_key,test_api_key_stage3
+      PATA_LLM_PROVIDER: anthropic
+      ANTHROPIC_API_KEY: sk-placeholder-ci
+      PATA_RATE_LIMIT_RPS: "100.0"
+      PATA_RATE_LIMIT_BURST: "200.0"
+      PATA_REQUEST_TIMEOUT_SEC: "30.0"
+      # ── Demo mode: pre-recorded responses for the 6 benchmark addresses ──
+      # This prevents flaky Overpass / LLM calls in E2E and means the test
+      # does not require real API keys or network access to external services.
+      PATA_DEMO_MODE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: pip install --no-cache-dir -r backend/requirements.txt
+
+      - name: Run Alembic migrations (E2E DB)
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Start Pata API backend (background)
+        run: |
+          cd backend
+          uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 1 &
+          echo "Backend PID: $!"
+          # Wait for readiness (model preload can take up to 90s on CPU)
+          echo "Waiting for backend readiness..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/v1/health/live > /dev/null 2>&1; then
+              echo "Backend is live after ${i}x3s = $((i*3))s"
+              break
+            fi
+            sleep 3
+          done
+          curl -sf http://localhost:8000/v1/health/live || (echo "Backend failed to start" && exit 1)
+
+      - name: Install Playground dependencies and start (background)
+        run: |
+          cd frontend/playground
+          npm ci
+          VITE_API_URL=http://localhost:8000 VITE_API_KEY=pata_dev_key \
+            npm run dev -- --host 0.0.0.0 --port 5173 &
+          echo "Playground PID: $!"
+
+      - name: Install Dashboard dependencies and start (background)
+        run: |
+          cd frontend/review-dashboard
+          npm ci
+          VITE_API_URL=http://localhost:8000 \
+            npm run dev -- --host 0.0.0.0 --port 5174 &
+          echo "Dashboard PID: $!"
+
+      - name: Wait for both frontends to be ready
+        run: |
+          echo "Waiting for Playground (5173)..."
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+              echo "Playground ready"
+              break
+            fi
+            sleep 3
+          done
+          echo "Waiting for Dashboard (5174)..."
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:5174 > /dev/null 2>&1; then
+              echo "Dashboard ready"
+              break
+            fi
+            sleep 3
+          done
+          # Final health assertions
+          curl -sf http://localhost:5173 || (echo "Playground not ready" && exit 1)
+          curl -sf http://localhost:5174 || (echo "Dashboard not ready" && exit 1)
+
+      - name: Install Playwright + Chromium
+        run: |
+          cd frontend/e2e
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: |
+          cd frontend/e2e
+          npx playwright test --project=chromium
+        env:
+          E2E_PLAYGROUND_URL: http://localhost:5173
+          E2E_DASHBOARD_URL: http://localhost:5174
+          PATA_API_KEY: pata_dev_key
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/e2e/playwright-report/
+          retention-days: 7
+
+

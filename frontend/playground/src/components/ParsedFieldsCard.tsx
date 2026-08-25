@@ -19,13 +19,13 @@ const FIELD_CONFIGS = [
 
 export const ParsedFieldsCard: React.FC<ParsedFieldsCardProps> = ({ parsed }) => {
   return (
-    <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 sm:p-5 shadow-xl space-y-4">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+    <div className="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 shadow-lg dark:shadow-xl space-y-4 transition-colors duration-200">
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
         <div className="flex items-center gap-2">
-          <Layers className="h-5 w-5 text-cyan-400" />
-          <h3 className="text-sm font-bold text-white tracking-wide">Standardized Address Hierarchy</h3>
+          <Layers className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide">Standardized Address Hierarchy</h3>
         </div>
-        <span className="text-[11px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+        <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-950 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800">
           ISO / India Post Schema
         </span>
       </div>
@@ -41,24 +41,24 @@ export const ParsedFieldsCard: React.FC<ParsedFieldsCardProps> = ({ parsed }) =>
               key={field.key}
               className={`p-2.5 rounded-xl border flex flex-col justify-between transition-all ${
                 hasValue
-                  ? 'bg-slate-950 border-slate-800 shadow-sm hover:border-slate-700'
-                  : 'bg-slate-950/40 border-slate-800/40 opacity-40'
+                  ? 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300 dark:hover:border-slate-700'
+                  : 'bg-slate-50/40 dark:bg-slate-950/40 border-slate-200/40 dark:border-slate-800/40 opacity-40'
               }`}
             >
               <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {field.label}
                 </span>
-                <Icon className="h-3 w-3 text-slate-500" />
+                <Icon className="h-3 w-3 text-slate-400 dark:text-slate-500" />
               </div>
 
               <div className="mt-0.5">
                 {hasValue ? (
-                  <span className="text-xs font-bold text-slate-100 font-mono break-words">
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100 font-mono break-words">
                     {String(value)}
                   </span>
                 ) : (
-                  <span className="text-xs text-slate-600 font-mono italic">
+                  <span className="text-xs text-slate-400 dark:text-slate-600 font-mono italic">
                     Not extracted
                   </span>
                 )}

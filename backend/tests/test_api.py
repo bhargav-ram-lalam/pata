@@ -236,3 +236,41 @@ def test_resolve_batch(client):
     assert len(data["results"]) == 3
     assert data["results"][0]["success"] is True
     assert data["results"][0]["result"]["parsed"]["pincode"] == "560001"
+
+
+# ---------------------------------------------------------------------------
+# Precision / Anchor-Type & Regression Tests
+# ---------------------------------------------------------------------------
+
+def test_resolve_anchor_type_and_accuracy_radius(client):
+    """Ensure anchor_type and accuracy_radius_meters are surfaced in resolution."""
+    payload = {
+        "address": "Flat 402, Shanti Heights, Near Apollo Hospital, Bannerghatta Road, Bengaluru 560076",
+    }
+    resp = client.post("/v1/resolve", json=payload, headers={"X-API-Key": API_KEY})
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "anchor_type" in data
+    assert data["anchor_type"] in ("landmark", "pincode_centroid", "osm_geocode")
+    assert "accuracy_radius_meters" in data
+    assert isinstance(data["accuracy_radius_meters"], int)
+    assert data["accuracy_radius_meters"] > 0
+
+
+def test_garbled_address_unresolvable(client):
+    """Ensure unresolvable / garbled address does not create fake 'Unknown City' data."""
+    payload = {
+        "address": "somewhere near the big tree, 3rd house, some locality",
+    }
+    resp = client.post("/v1/resolve", json=payload, headers={"X-API-Key": API_KEY})
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["needs_human_review"] is True
+    assert data["confidence"] < 0.50
+    assert data["anchor_type"] == "unresolved"
+    assert data["accuracy_radius_meters"] is None
+    # Parsed city should not be literal string 'Unknown City'
+    assert data["parsed"].get("city") != "Unknown City"
+

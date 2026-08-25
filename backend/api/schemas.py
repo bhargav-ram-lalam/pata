@@ -113,6 +113,14 @@ class ReviewQueueItem(BaseModel):
     longitude: Optional[float] = None
     parsed: Dict[str, Any]
     digipin: Optional[str] = None
+    anchor_type: Optional[str] = Field(
+        None,
+        description="Geographic anchor type: 'landmark' | 'pincode_centroid' | 'osm_geocode' | 'unresolved'",
+    )
+    accuracy_radius_meters: Optional[int] = Field(
+        None,
+        description="Approximate spatial accuracy radius in meters",
+    )
     evidence: Dict[str, Any]
     review_status: str
     created_at: Optional[str] = None

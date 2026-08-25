@@ -5,6 +5,8 @@ interface ConfidenceBadgeProps {
   confidence: number;
   needsHumanReview: boolean;
   tier?: string;
+  anchorType?: string | null;
+  accuracyRadiusMeters?: number | null;
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -12,12 +14,15 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
   confidence,
   needsHumanReview,
   tier: propTier,
+  anchorType,
+  accuracyRadiusMeters,
   size = 'md',
 }) => {
   // Determine tier based on confidence score or explicit tier prop
   const tier = (propTier || (confidence >= 0.8 ? 'high' : confidence >= 0.5 ? 'medium' : 'low')).toLowerCase();
 
   const percentage = Math.round(confidence * 100);
+  const isPincode = anchorType === 'pincode_centroid';
 
   if (tier === 'high') {
     return (
@@ -34,6 +39,12 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
         <span className="text-[11px] text-emerald-400/80 font-medium">
           ✅ Verified delivery anchor — Auto-confirmed for immediate order creation
         </span>
+        {isPincode && (
+          <div className="mt-1 flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-200 text-[11px]">
+            <span className="text-amber-400">⚠️</span>
+            <span>No landmark matched — location is an area estimate (~2km radius), not a specific point.</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -53,6 +64,12 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
         <span className="text-[11px] text-amber-300 font-medium flex items-center gap-1">
           <span>⚠️ Ambiguous landmark / postal boundary — Customer pin confirmation enabled below</span>
         </span>
+        {isPincode && (
+          <div className="mt-1 flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-200 text-[11px]">
+            <span className="text-amber-400">⚠️</span>
+            <span>No landmark matched — location is an area estimate (~2km radius), not a specific point.</span>
+          </div>
+        )}
       </div>
     );
   }
@@ -69,6 +86,12 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
           {percentage}%
         </span>
       </div>
+      {isPincode && (
+        <div className="flex items-start gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-200 text-[11px]">
+          <span className="text-amber-400">⚠️</span>
+          <span>No landmark matched — location is an area estimate (~2km radius), not a specific point.</span>
+        </div>
+      )}
       {needsHumanReview && (
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-semibold">
           <ShieldAlert className="h-3.5 w-3.5 text-rose-400 shrink-0" />

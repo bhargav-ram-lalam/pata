@@ -34,6 +34,7 @@ from persistence.database import init_db, get_db_session
 from persistence.purge_job import purge_worker
 from persistence.repository import save_resolution, get_resolution_by_id
 from pipeline import resolve_address, preload_models, AddressResolution
+from pipeline_demo import resolve_address_demo, is_demo_mode
 
 logger = get_logger("pata.api")
 
@@ -142,9 +143,11 @@ async def resolve_single_address(
     async def _execute_pipeline():
         # Run the CPU/network pipeline in thread pool to avoid blocking the event loop
         loop = asyncio.get_running_loop()
+        # PATA_DEMO_MODE=1 → return pre-recorded response for the 6 benchmark addresses
+        _fn = resolve_address_demo if is_demo_mode() else resolve_address
         return await loop.run_in_executor(
             None,
-            lambda: resolve_address(
+            lambda: _fn(
                 req.address,
                 request_id=req_id,
                 hint_lat=req.hint_lat,

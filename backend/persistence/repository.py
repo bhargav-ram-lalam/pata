@@ -91,6 +91,28 @@ def get_resolution_by_id(db: Session, request_id: str) -> Optional[dict]:
     if not record:
         return None
 
+    ev = record.evidence or {}
+    anchor = ev.get("anchor_type")
+    if not anchor:
+        coord_src = ev.get("coordinate_source", "")
+        if "osm_poi" in coord_src or "landmark" in coord_src:
+            anchor = "landmark"
+        elif record.latitude is not None and record.longitude is not None:
+            anchor = "pincode_centroid"
+        else:
+            anchor = "unresolved"
+
+    acc_radius = ev.get("accuracy_radius_meters")
+    if acc_radius is None:
+        if anchor == "landmark":
+            acc_radius = 150
+        elif anchor == "pincode_centroid":
+            acc_radius = 2000
+        elif anchor == "osm_geocode":
+            acc_radius = 500
+        else:
+            acc_radius = None
+
     return {
         "request_id": record.request_id,
         "parsed": record.parsed,
@@ -98,6 +120,8 @@ def get_resolution_by_id(db: Session, request_id: str) -> Optional[dict]:
         "latitude": record.latitude,
         "longitude": record.longitude,
         "confidence": record.confidence,
+        "anchor_type": anchor,
+        "accuracy_radius_meters": acc_radius,
         "needs_human_review": record.needs_human_review,
         "review_status": record.review_status,
         "evidence": record.evidence,
@@ -167,6 +191,28 @@ def get_review_queue(
 
     items = []
     for r in records:
+        ev = r.evidence or {}
+        anchor = ev.get("anchor_type")
+        if not anchor:
+            coord_src = ev.get("coordinate_source", "")
+            if "osm_poi" in coord_src or "landmark" in coord_src:
+                anchor = "landmark"
+            elif r.latitude is not None and r.longitude is not None:
+                anchor = "pincode_centroid"
+            else:
+                anchor = "unresolved"
+
+        acc_radius = ev.get("accuracy_radius_meters")
+        if acc_radius is None:
+            if anchor == "landmark":
+                acc_radius = 150
+            elif anchor == "pincode_centroid":
+                acc_radius = 2000
+            elif anchor == "osm_geocode":
+                acc_radius = 500
+            else:
+                acc_radius = None
+
         items.append({
             "request_id": r.request_id,
             "confidence": r.confidence,
@@ -174,6 +220,8 @@ def get_review_queue(
             "longitude": r.longitude,
             "parsed": r.parsed,
             "digipin": r.digipin,
+            "anchor_type": anchor,
+            "accuracy_radius_meters": acc_radius,
             "evidence": r.evidence,
             "review_status": r.review_status,
             "created_at": r.created_at.isoformat() if r.created_at else None,

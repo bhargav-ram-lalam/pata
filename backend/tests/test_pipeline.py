@@ -320,6 +320,13 @@ def run_case(tc: AddressTestCase) -> CaseResult:
     if ttl <= now:
         failures.append(f"ttl_for_raw_retention {ttl} is not in the future")
 
+    # Precision fields check
+    if resolution.anchor_type not in ("landmark", "pincode_centroid", "osm_geocode", "unresolved"):
+        failures.append(f"Invalid anchor_type: {resolution.anchor_type!r}")
+    if resolution.anchor_type in ("landmark", "pincode_centroid", "osm_geocode"):
+        if resolution.accuracy_radius_meters is None or resolution.accuracy_radius_meters <= 0:
+            failures.append(f"Expected positive accuracy_radius_meters for anchor_type={resolution.anchor_type}")
+
     return CaseResult(
         case       = tc,
         resolution = resolution,

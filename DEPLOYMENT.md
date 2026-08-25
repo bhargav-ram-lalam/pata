@@ -132,13 +132,13 @@ curl http://localhost:8000/v1/metrics
 
 ```bash
 # Apply all migrations to Postgres
-alembic upgrade head
+cd backend && alembic upgrade head
 
 # Generate a new migration after model changes
-alembic revision --autogenerate -m "description_of_change"
+cd backend && alembic revision --autogenerate -m "description_of_change"
 
 # Check current migration version
-alembic current
+cd backend && alembic current
 ```
 
 > [!NOTE]
@@ -197,3 +197,100 @@ PATA_WEBHOOK_SECRET=your_256_bit_secret_here
 ```
 
 Webhook payload is signed with HMAC-SHA256. See [docs/integration_guide.md](docs/integration_guide.md) for signature verification code.
+
+---
+
+## 9. Live Deployment (Stage 6 — Optional Pre-Demo)
+
+> [!IMPORTANT]
+> **DPDP Act 2023 — Region Availability on Free Tiers:**  
+> The Digital Personal Data Protection Act requires all processing of Indian personal data (including address strings) to remain within Indian geographic boundaries. As of August 2026, **no free-tier cloud hosting provider offers a production-grade India region**:
+> - **Fly.io** — nearest free-tier region is `sin` (Singapore) or `hkg` (Hong Kong). Not India-compliant for production.
+> - **Railway** — offers `ap-south` on paid plans; free tier is US/EU only.
+> - **Render** — no India region on any plan as of this date.
+> - **Vercel / Netlify (frontends only)** — CDN with India PoPs, but they do not process address data directly; they serve static bundles to the browser which then call the backend. Acceptable.
+>
+> **For a hackathon demo**, deploying to Singapore (`sin`) is acceptable and should be stated honestly. For a production pilot, use AWS `ap-south-1` (Mumbai) or GCP `asia-south1` (Mumbai).
+
+### 9.1 Backend — Fly.io (ap-south nearest: Singapore)
+
+```bash
+# Install flyctl
+curl -L https://fly.io/install.sh | sh
+
+# Authenticate
+fly auth login
+
+# Launch from backend directory (interactive first time — sets region to sin for closest to India)
+cd backend
+fly launch --name pata-api --region sin --dockerfile Dockerfile
+
+# Set secrets (replace with real values)
+fly secrets set \
+  PATA_API_KEYS="pata_prod_key" \
+  PATA_LLM_PROVIDER="anthropic" \
+  ANTHROPIC_API_KEY="sk-ant-..." \
+  PATA_WEBHOOK_SECRET="..." \
+  POSTGRES_PASSWORD="..."
+
+# Provision Postgres (Fly managed)
+fly postgres create --name pata-db --region sin
+fly postgres attach pata-db --app pata-api
+# Fly sets DATABASE_URL automatically in the app environment
+
+# Provision Redis (Upstash free tier — set PATA_REDIS_URL manually)
+# Sign up at https://upstash.com, create a Redis db, copy the URL:
+fly secrets set PATA_REDIS_URL="rediss://..."
+
+# Deploy
+fly deploy
+
+# Run migrations
+fly ssh console -C "alembic upgrade head"
+
+# Verify
+curl https://pata-api.fly.dev/v1/health/live
+```
+
+### 9.2 Frontends — Vercel
+
+Both frontends are standard Vite builds. Deploy each separately:
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy Playground
+cd frontend/playground
+# Set environment variable in Vercel dashboard:
+#   VITE_API_URL = https://pata-api.fly.dev
+#   VITE_API_KEY = pata_prod_key
+vercel --prod
+
+# Deploy Dashboard
+cd ../review-dashboard
+# Same VITE_API_URL setting
+vercel --prod
+```
+
+### 9.3 Post-Deploy Checklist
+
+```bash
+# Backend health
+curl https://pata-api.fly.dev/v1/health/live
+curl https://pata-api.fly.dev/v1/health/ready
+
+# Test resolution
+curl -X POST https://pata-api.fly.dev/v1/resolve \
+  -H "X-API-Key: pata_prod_key" \
+  -H "Content-Type: application/json" \
+  -d '{"address": "Flat 402, Shanti Heights, Near Apollo Hospital, Bannerghatta Road, Bengaluru 560076"}'
+
+# Add the live URL to README.md top section
+```
+
+### 9.4 Honest Region Disclosure (for judges / DPDP)
+
+If asked about data residency during the demo:
+
+> "Our hackathon deployment runs on Fly.io Singapore — the closest available free-tier region to India. For a production deployment with a commercial partner, we would use AWS `ap-south-1` Mumbai or GCP `asia-south1`, which are both DPDP-compliant. The DPDP guardrails in the code — 24h TTL purge, PII-free long-term storage — are active in this demo deployment; only the geographic boundary differs."

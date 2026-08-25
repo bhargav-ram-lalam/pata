@@ -8,6 +8,8 @@ interface MapViewerProps {
   longitude: number | null;
   confidence: number;
   needsHumanReview: boolean;
+  anchorType?: string | null;
+  accuracyRadiusMeters?: number | null;
   requestId?: string;
   landmarkMatch?: {
     name?: string;
@@ -24,6 +26,8 @@ export const MapViewer: React.FC<MapViewerProps> = ({
   longitude,
   confidence,
   needsHumanReview,
+  anchorType,
+  accuracyRadiusMeters,
   requestId,
   landmarkMatch,
   onLocationUpdated,
@@ -33,6 +37,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
   const mainMarkerRef = useRef<L.Marker | null>(null);
   const poiMarkerRef = useRef<L.Marker | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
 
   const [draggedCoords, setDraggedCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -136,7 +141,26 @@ export const MapViewer: React.FC<MapViewerProps> = ({
       });
     }
 
-    mainMarkerRef.current = marker;
+    // Accuracy Radius Circle
+    if (circleRef.current) {
+      circleRef.current.remove();
+      circleRef.current = null;
+    }
+
+    const isPincode = anchorType === 'pincode_centroid';
+    const radius = accuracyRadiusMeters || (isPincode ? 2000 : 150);
+    const circleColor = isPincode ? '#f59e0b' : '#06b6d4';
+
+    const circle = L.circle([currentLat, currentLng], {
+      radius: radius,
+      color: circleColor,
+      fillColor: circleColor,
+      fillOpacity: isPincode ? 0.08 : 0.12,
+      weight: 1.5,
+      dashArray: isPincode ? '4, 6' : undefined,
+    }).addTo(map);
+
+    circleRef.current = circle;
 
     // POI Landmark Marker (if Agent 3 matched an OSM POI)
     if (poiMarkerRef.current) {
@@ -200,15 +224,20 @@ export const MapViewer: React.FC<MapViewerProps> = ({
       polylineRef.current = polyline;
 
       // Fit bounds to show both points with padding
-      const group = L.featureGroup([marker, poiMarker]);
+      const group = L.featureGroup([marker, poiMarker, circle]);
       map.fitBounds(group.getBounds().pad(0.2));
+    } else {
+      // Fit bounds to circle if pincode centroid so the whole area is visible
+      if (isPincode) {
+        map.fitBounds(circle.getBounds().pad(0.1));
+      }
     }
 
     // Clean-up on unmount
     return () => {
       // Keep map instance alive across rerenders unless coords become null
     };
-  }, [latitude, longitude, confidence, isMedium, landmarkMatch]);
+  }, [latitude, longitude, confidence, isMedium, landmarkMatch, anchorType, accuracyRadiusMeters]);
 
   // Reset map view to initial resolved coords
   const handleResetLocation = () => {
@@ -263,6 +292,8 @@ export const MapViewer: React.FC<MapViewerProps> = ({
 
   const activeLat = draggedCoords?.lat ?? latitude!;
   const activeLng = draggedCoords?.lng ?? longitude!;
+  const isPincode = anchorType === 'pincode_centroid';
+  const radius = accuracyRadiusMeters || (isPincode ? 2000 : 150);
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -270,15 +301,31 @@ export const MapViewer: React.FC<MapViewerProps> = ({
       <div className="relative h-[380px] sm:h-[420px] w-full rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-950">
         <div ref={mapContainerRef} className="h-full w-full" />
 
-        {/* Map Header Overlay */}
-        <div className="absolute top-3 left-3 z-[400] flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 text-xs font-mono text-slate-200 shadow-lg">
-          <Navigation className="h-3.5 w-3.5 text-cyan-400" />
-          <span>{activeLat.toFixed(5)}, {activeLng.toFixed(5)}</span>
-          {draggedCoords && (
-            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-sans font-bold">
-              Adjusted
+        {/* Map Header Overlay: Coordinates & Precision Badge */}
+        <div className="absolute top-3 left-3 z-[400] flex flex-wrap items-center gap-2 max-w-[calc(100%-80px)]">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-800 text-xs font-mono text-slate-200 shadow-lg">
+            <Navigation className="h-3.5 w-3.5 text-cyan-400" />
+            <span>{activeLat.toFixed(5)}, {activeLng.toFixed(5)}</span>
+            {draggedCoords && (
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-sans font-bold">
+                Adjusted
+              </span>
+            )}
+          </div>
+
+          {/* Precision / Anchor-Type Badge */}
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl backdrop-blur-md border text-[11px] font-medium shadow-lg ${
+            isPincode
+              ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+              : 'bg-cyan-950/80 border-cyan-500/40 text-cyan-300'
+          }`}>
+            <span>{isPincode ? '📮' : '📍'}</span>
+            <span>
+              {isPincode
+                ? `Pincode-area estimate (~${(radius / 1000).toFixed(0)}km) — no landmark match`
+                : `Landmark-anchored (~${radius}m)`}
             </span>
-          )}
+          </div>
         </div>
 
         {/* OSM Landmark Legend */}

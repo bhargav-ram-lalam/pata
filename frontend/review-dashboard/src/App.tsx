@@ -4,6 +4,7 @@ import { LoginGate } from './components/LoginGate';
 import { StatsHeader } from './components/StatsHeader';
 import { ReviewQueueTable } from './components/ReviewQueueTable';
 import { ReviewDetailModal } from './components/ReviewDetailModal';
+import { ThemeToggle } from './components/ThemeToggle';
 import { getSessionApiKey, clearSessionApiKey, fetchReviewQueue, fetchOpsMetrics, ApiError } from './services/api';
 import type { ReviewQueueItem, OpsMetrics } from './types/api';
 
@@ -93,55 +94,57 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* Top Ops Navigation Bar */}
-      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           
           {/* Logo & Title */}
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-cyan-400 p-0.5 shadow-lg shadow-brand-500/20">
-              <div className="h-full w-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                <ShieldCheck className="h-5 w-5 text-cyan-400" />
+              <div className="h-full w-full bg-white dark:bg-slate-950 rounded-[10px] flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
               </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-black tracking-tight text-white">
-                  Pata <span className="text-brand-400">Ops Review</span>
+                <span className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Pata <span className="text-brand-600 dark:text-brand-400">Ops Review</span>
                 </span>
-                <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                <span className="text-[10px] uppercase font-mono font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/20">
                   Stage 5
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">
+              <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
                 Human-Review & Feedback Loop Dashboard
               </p>
             </div>
           </div>
 
-          {/* Right Actions: Switch to Playground, Key & Logout */}
-          <div className="flex items-center gap-3">
+          {/* Right Actions: Switch to Playground, ThemeToggle, Key & Logout */}
+          <div className="flex items-center gap-2.5">
             <a
               href="http://localhost:5173"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
             >
-              <MapPin className="h-3.5 w-3.5 text-cyan-400" />
+              <MapPin className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
               <span className="hidden sm:inline">Playground (Port 5173)</span>
               <ExternalLink className="h-3 w-3 text-slate-400" />
             </a>
 
-            <div className="h-4 w-px bg-slate-800" />
+            <ThemeToggle />
+
+            <div className="h-4 w-px bg-slate-300 dark:bg-slate-800" />
 
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-slate-400 hidden md:inline">
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400 hidden md:inline">
                 {apiKey.slice(0, 8)}...
               </span>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-rose-950/40 border border-slate-800 hover:border-rose-800 text-xs font-semibold text-slate-400 hover:text-rose-300 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-950/40 border border-slate-300 hover:border-rose-300 dark:border-slate-800 dark:hover:border-rose-800 text-xs font-semibold text-slate-600 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-300 transition-colors"
                 title="Disconnect API session"
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -158,22 +161,22 @@ export function App() {
         
         {/* Toast Notification */}
         {toastMessage && (
-          <div className="p-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-semibold flex items-center gap-2 shadow-2xl animate-fade-in">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+          <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-500 text-emerald-800 dark:text-emerald-200 text-xs font-semibold flex items-center gap-2 shadow-lg dark:shadow-2xl animate-fade-in">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>{toastMessage}</span>
           </div>
         )}
 
         {/* Global Error Banner */}
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-center justify-between gap-3 shadow-xl animate-fade-in">
+          <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center justify-between gap-3 shadow-lg dark:shadow-xl animate-fade-in">
             <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+              <AlertCircle className="h-4 w-4 text-rose-500 dark:text-rose-400 shrink-0" />
               <span>{error}</span>
             </div>
             <button
               onClick={loadData}
-              className="px-3 py-1 rounded-lg bg-rose-900 hover:bg-rose-800 text-xs font-semibold text-white shrink-0"
+              className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 dark:bg-rose-900 dark:hover:bg-rose-800 text-xs font-semibold text-white shrink-0 shadow-sm"
             >
               Retry
             </button>
@@ -214,13 +217,17 @@ export function App() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 mt-12">
+      <footer className="border-t border-slate-200 dark:border-slate-900 bg-white dark:bg-slate-950 py-6 mt-12 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <div>
-            <span className="font-bold text-slate-400">Pata (पता)</span> • Human-in-the-Loop Feedback & Ops Control
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-slate-700 dark:text-slate-400">Pata (पता) Ops</span>
+            <span>—</span>
+            <span>Human-in-the-Loop Arbitration & Correction Training Logger</span>
           </div>
-          <div>
-            <span>Backend: PostgreSQL + Redis • Telemetry: Prometheus Live</span>
+          <div className="flex items-center gap-4 text-slate-400 dark:text-slate-500 font-mono text-[11px]">
+            <span>DPDP 24h Purge Active</span>
+            <span>•</span>
+            <span>India Post DIGIPIN</span>
           </div>
         </div>
       </footer>

@@ -2,7 +2,27 @@
 
 [![CI](https://github.com/bhargav-ram-lalam/pata/actions/workflows/ci.yml/badge.svg)](https://github.com/bhargav-ram-lalam/pata/actions/workflows/ci.yml)
 
-> **Status: Stage 5 — Full-Stack (AI Engine + Playground + Ops Review Dashboard)**
+> **Status: Stage 6 — Demo Ready (AI Engine + Playground + Ops Dashboard + Architecture Docs + E2E Tests)**
+
+## 🖥 Demo Setup (Local)
+
+> **Cloud deployment is not yet live.** Run locally with one command:
+>
+> ```bash
+> # Requires Docker — starts all 5 services (Postgres + Redis + API + both frontends)
+> docker-compose -f docker-compose.demo.yml up --build
+> # First run only — apply DB migrations:
+> docker-compose -f docker-compose.demo.yml exec pata-api alembic upgrade head
+> # Seed the review queue for the dashboard demo:
+> PATA_DEMO_MODE=1 python backend/scripts/seed_demo_data.py
+> ```
+>
+> Then open **`http://localhost:5173`** (Playground) and **`http://localhost:5174`** (Dashboard).  
+> API key: `pata_dev_key`
+>
+> *To deploy to Fly.io + Vercel, follow [DEPLOYMENT.md §9](DEPLOYMENT.md#9-live-deployment-stage-6--optional-pre-demo). Update this section with the live URLs once deployed.*
+
+---
 
 Pata is an AI-powered address resolution and standardization engine engineered specifically for the complexities of Indian last-mile logistics. Indian addresses are notorious for being unstructured, landmark-centric (e.g., *"behind Hanuman Mandir, opposite yellow water tank"*), colloquial, and frequently plagued by mismatched pincodes, missing house numbers, and mixed-script transliterations. Standard Western geocoders fail on these patterns. Pata combines deterministic postal parsing, fine-grained Named Entity Recognition (NER), spatial landmark validation, and confidence arbitration to resolve messy input into verified, deliverable coordinates and DIGIPIN codes.
 
@@ -19,15 +39,26 @@ Pata is an AI-powered address resolution and standardization engine engineered s
 
 ## Quick Start (Full Stack Demo)
 
-### 1. Start Backend & Distributed State
+### 0. One-Command Demo (all 5 services)
+
+```bash
+# Recommended for demos — brings up backend + Postgres + Redis + both frontends
+docker-compose -f docker-compose.demo.yml up --build
+# First run only: apply DB migrations
+docker-compose -f docker-compose.demo.yml exec pata-api alembic upgrade head
+```
+
+Visit **`http://localhost:5173`** (Playground) and **`http://localhost:5174`** (Dashboard).
+
+### 1. Start Backend & Distributed State (manual)
 
 ```bash
 # Option A: Full Production Stack (Postgres + Redis + Pata API)
 docker-compose up -d --build
-alembic upgrade head
+cd backend && alembic upgrade head
 
 # Option B: Local SQLite Dev (no external services needed)
-uvicorn api.main:app --port 8000
+cd backend && uvicorn api.main:app --port 8000
 ```
 
 ### 2. Launch Frontend Applications

@@ -20,6 +20,8 @@ export interface ReviewQueueItem {
   longitude: number | null;
   parsed: ParsedAddress;
   digipin: string | null;
+  anchor_type?: 'landmark' | 'pincode_centroid' | 'osm_geocode' | 'unresolved' | string | null;
+  accuracy_radius_meters?: number | null;
   evidence: Record<string, any>;
   review_status: 'pending_review' | 'confirmed' | 'corrected' | 'rejected' | 'auto_confirmed' | string;
   created_at?: string | null;

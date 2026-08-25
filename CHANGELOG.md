@@ -4,6 +4,116 @@ All notable changes to the Pata codebase are documented in this file.
 
 ---
 
+## [0.7.2] — Light / Dark Theme Mode & UI Switcher (August 2026)
+
+### Added
+- **Interactive Light / Dark Theme Switcher**:
+  - Created [`ThemeToggle.tsx`](file:///d:/pata/frontend/playground/src/components/ThemeToggle.tsx) component integrated into the navigation headers of both applications:
+    - Address Resolution Playground (`http://localhost:5173`)
+    - Ops Review Dashboard (`http://localhost:5174`) and Login Gate
+  - Smooth ☀️ Sun / 🌙 Moon transition icons with persistent state in `localStorage` (`pata_theme`).
+  - Comprehensive theme styling tokens:
+    - **Light Theme**: Crisp slate-50 background, elevated white cards, refined slate-200 borders, high-contrast typography, and light-tinted badge pills.
+    - **Dark Theme**: Deep slate-950 background, glassmorphic dark cards, and glowing cyber-accents.
+    - **Leaflet Maps**: Adaptive map container and popup bubble styling responding to the active theme.
+
+---
+
+## [0.7.1] — Precision Transparency & Review Queue Deduplication Fix (August 2026)
+
+### Added
+- **Precision / Spatial Anchor Transparency**:
+  - `AddressResolution` and `ReviewQueueItem` schemas now include explicit `anchor_type` (`"landmark" | "pincode_centroid" | "osm_geocode" | "unresolved"`) and `accuracy_radius_meters` (`int | None`).
+  - `MapViewer.tsx` (both Playground and Review Dashboard) renders a translucent spatial accuracy circle (`L.circle`) sized by `accuracy_radius_meters` (~150m for landmark matches, ~2000m for pincode area centroids) and an anchor-type status badge.
+  - `ConfidenceBadge.tsx` displays an explicit caveat when `anchor_type === "pincode_centroid"` to prevent misinterpreting postal centroid estimates as building entrances.
+  - Added regression test `test_resolve_anchor_type_and_accuracy_radius` to `backend/tests/test_api.py`.
+- **Database Reset & Deduplication Tooling**:
+  - Created `backend/scripts/clear_demo_seed_data.py` to reset demo resolutions, raw staging addresses, and review queue backlogs between rehearsals.
+  - Added `--reset` flag and queue deduplication checking to `backend/scripts/seed_demo_data.py`.
+  - Created `docs/bugfix_notes.md` documenting root cause investigation findings and fixes.
+
+### Fixed
+- **Review Queue Row Accumulation**:
+  - Identified root cause of 65 duplicate low-confidence rows: local SQLite database accumulated requests across repeated test and rehearsal runs without clearing. Confirmed "Unknown City" is a UI fallback display string for valid `null` city values on unresolvable inputs.
+  - Added `test_garbled_address_unresolvable` regression test to `backend/tests/test_api.py`.
+
+---
+
+## [0.7.0] — Clean Backend / Frontend Architecture Restructuring (August 2026)
+
+### Changed
+- **Repository Architecture Reorganization** — Performed clean `backend/` and `frontend/` separation via `git mv` (preserving full git commit history):
+  - **`backend/`**: Consolidated `agents/`, `api/`, `alembic/`, `observability/`, `persistence/`, `resilience/`, `scripts/`, `tests/`, `examples/`, `pipeline.py`, `pipeline_demo.py`, `alembic.ini`, `pyproject.toml`, `requirements.txt`, `Dockerfile`, and `backend/.env.example`.
+  - **`frontend/`**: Grouped UI applications (`playground/`, `review-dashboard/`), `e2e/`, and created `frontend/.env.example`.
+  - **Root Orchestration**: `docker-compose.yml`, `docker-compose.demo.yml`, `docs/`, `k8s/`, and top-level documentation remain at repository root.
+- **Docker & Compose**: Updated backend service build contexts in `docker-compose.yml`, `docker-compose.demo.yml`, and `.github/workflows/deploy.yml` to `./backend`.
+- **CI / CD Pipelines**: Updated `.github/workflows/ci.yml` and `deploy.yml` with `working-directory: backend` and updated dependency paths.
+- **Documentation & Scripts**: Reconciled paths in `README.md`, `DEPLOYMENT.md`, `PIPELINE.md`, `docs/demo_script.md`, `docs/architecture.md`, and `docs/pitch.md`.
+- **Zero Behavioral Changes**: Pure structural reorganization. All 46 backend unit/integration tests and all 4 Playwright E2E tests verified passing identically.
+
+---
+
+## [0.6.1] — Stage 7: Verification & Seed Data (August 2026)
+
+### Added
+- **`scripts/seed_demo_data.py`** — Interactive and automated demo data seeding script. Seeds the 4 review-triggering benchmark addresses (2 MEDIUM + 2 LOW) into the persistence database with `pending_review` status, populating the Ops Review Dashboard backlog for live presentations. Includes automated queue verification with summary printout.
+
+### Fixed
+- **`frontend/e2e/pata_journey.spec.ts`** — Fixed Playwright locator in test 4 (`Review Dashboard: login, queue accessible, rows visible`) to target clean table and telemetry elements, achieving 4/4 passing E2E tests (11.0s runtime).
+- **`scripts/seed_demo_data.py`** — Added UTF-8 stdout/stderr stream wrapper to prevent `UnicodeEncodeError` on Windows consoles with cp1252 default encoding.
+- **`scripts/preflight_check.sh`** — Added multi-platform python binary discovery (`python3` / `python` / `py`) to support Git Bash on Windows and native Linux/macOS runners.
+- **`docs/demo_script.md`** — Added `scripts/seed_demo_data.py` execution to the mandatory pre-show setup and day-of checklist.
+- **`README.md`** — Reconciled deployment section to reflect local-first one-command setup while cloud deployment is finalized.
+
+---
+
+## [0.6.0] — Stage 6: Demo Readiness & Deliverables Packaging (August 2026)
+
+### Added
+
+**Part A — Demo Safety Net**
+- **`pipeline_demo.py`** — Demo-mode wrapper around `pipeline.py`. When `PATA_DEMO_MODE=1` is set, the 6 playground benchmark addresses return pre-recorded `AddressResolution` objects (captured from real pipeline runs) instead of calling Overpass or the LLM. Any non-benchmark address still calls the real pipeline. Zero-change to default behaviour.
+- **`api/main.py`** — Routes through `resolve_address_demo()` when `PATA_DEMO_MODE=1`; imports `is_demo_mode` from `pipeline_demo`. The real pipeline is untouched.
+- **`.env.example`** — Added `Demo Fallback` section documenting `PATA_DEMO_MODE` with a commented-out example line.
+- **`scripts/preflight_check.sh`** — Pre-demo checklist script. Pings 9 subsystems (backend liveness, readiness, bharataddress parser, IndicBERT warm, Overpass circuit breaker, LLM key, both frontend servers, demo mode status). Prints ✅/❌ per check; exits 0 only if all pass. Prints "✈ READY TO DEMO" or failure remediation steps.
+- **`docker-compose.demo.yml`** — One-command full-stack demo setup: PostgreSQL + Redis + Pata API + Playground (port 5173) + Dashboard (port 5174). `start_period: 120s` on the API container for IndicBERT cold-load. `PATA_DEMO_MODE=1` by default. Named node_modules volumes prevent host directory conflicts.
+- **`docs/demo_script.md`** — Minute-by-minute 8-minute live demo script with exact actions, spoken lines, Q&A seeds, and a same-day checklist. Serves as rehearsal guide, on-stage crib sheet, and voiceover script for a pre-recorded backup video.
+
+**Part B — Architecture Diagrams**
+- **`docs/architecture.md`** — Three focused Mermaid diagrams rendered natively on GitHub:
+  1. **Pipeline Flow** (`flowchart TD`): All 5 agents with trigger conditions as decision diamonds, tier routing (HIGH/MEDIUM/LOW), per-agent latency and cost annotations.
+  2. **Full-Stack View** (`flowchart LR`): Both frontends → FastAPI endpoints → 5-agent pipeline → Postgres/Redis/Overpass/LLM, with the review-loop feedback path (correct → export → fine-tune) diagrammed for the first time.
+  3. **Deployment Topology**: Load balancer in ap-south-1, Kubernetes HPA pods, PostgreSQL + Redis, external services, DPDP TTL purge CronJob.
+
+**Part C — Business Pitch**
+- **`docs/pitch.md`** — 1.5-page judge-facing pitch. Problem framing (RTO cost, geocoder failure), solution differentiators (evidence-backed, cost-aware, DIGIPIN), measured cost table (all figures from Stage 3/4 benchmark: $0.000070/15 addresses, $15/month at 1M orders), RTO savings framing (₹150–₹300/return), and 4 concrete next steps. No code, no schemas, no inflated numbers.
+
+**Part D — End-to-End Playwright Test**
+- **`frontend/e2e/package.json`** — Scoped Playwright package (does not affect root or frontend packages).
+- **`frontend/e2e/playwright.config.ts`** — Chromium headless config targeting ports 5173/5174 with 60s test timeout, trace on first retry, screenshot on failure.
+- **`frontend/e2e/pata_journey.spec.ts`** — 4-test suite proving the full product journey:
+  - HIGH benchmark auto-resolves → map marker + DIGIPIN + HIGH banner
+  - MEDIUM benchmark resolves → MEDIUM banner → pin drag simulation → confirm
+  - LOW benchmark → FLAGGED FOR HUMAN REVIEW text visible
+  - Review Dashboard → login via quick-fill → queue table accessible → stats header visible
+- **`.github/workflows/ci.yml`** — Added `e2e` job (`needs: [test]`): starts backend (uvicorn, PATA_DEMO_MODE=1), both Vite dev servers, waits for readiness, runs Playwright. Uploads HTML report as CI artifact on failure.
+
+**Part E — Live Deployment Documentation**
+- **`DEPLOYMENT.md §9`** — Live deployment guide for Fly.io (backend, Singapore region) + Vercel (frontends). Includes honest DPDP Act note that no free-tier provider offers a true India region, with the recommended answer for judges on data residency.
+- **`README.md`** — Added `🚀 Live Demo` section at top with Vercel/Fly.io URLs and fallback note. Added `§0` one-command demo quick-start using `docker-compose.demo.yml`. Status updated to Stage 6.
+
+### Changed
+- `api/main.py`: Import `resolve_address_demo` and `is_demo_mode` from `pipeline_demo`; route through demo wrapper in `resolve_single_address` handler when `PATA_DEMO_MODE=1`. Version string remains `0.4.0` (no API contract changes).
+- `.env.example`: Added `Demo Fallback` section.
+- `README.md`: Status → Stage 6; added live demo section and one-command setup.
+- `DEPLOYMENT.md`: Added §9 live deployment guide.
+- `.github/workflows/ci.yml`: Added `e2e` job as final CI step.
+
+### Fixed
+- **`tests/conftest.py`** *(new)* — Added `autouse` pytest fixture that resets the five pipeline agent singletons (`_agent1`–`_agent5`) to `None` before and after every test. Root cause: `pipeline._init_agents()` only sets singletons on first call (correct for production to avoid repeated IndicBERT loads), but caused test cross-contamination: if any earlier test or import initialized `_agent4` with the default `llm_provider="anthropic"`, subsequent tests that explicitly pass `llm_provider="mock"` silently got the already-initialized Anthropic agent instead — causing `No module named 'anthropic'` LLM call failures and T01 `needs_human_review=True` (expected `False`). The fixture forces fresh initialization per test, so `llm_provider="mock"` is always respected.
+
+---
+
 ## [0.5.0] — Stage 5: Frontend Surfaces (August 2026)
 
 ### Added

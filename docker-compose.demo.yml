@@ -1,0 +1,178 @@
+version: "3.8"
+
+# ============================================================================
+# docker-compose.demo.yml — Pata One-Command Demo Setup
+# ============================================================================
+# Brings up ALL five services in one shot:
+#   - PostgreSQL 15
+#   - Redis 7
+#   - Pata API (backend, port 8000)
+#   - Resolution Playground (frontend, port 5173)
+#   - Ops Review Dashboard (frontend, port 5174)
+#
+# USAGE:
+#   docker-compose -f docker-compose.demo.yml up --build
+#
+# Then visit:
+#   http://localhost:5173  →  Resolution Playground
+#   http://localhost:5174  →  Ops Review Dashboard
+#   http://localhost:8000  →  Pata API
+#
+# DEMO SAFETY NET:
+#   PATA_DEMO_MODE=1 is enabled by default here.
+#   The 6 benchmark addresses return pre-recorded responses even without
+#   Overpass / LLM connectivity. All other addresses still hit the real pipeline.
+#
+# IMPORTANT — FIRST RUN:
+#   After the containers start, run the Alembic migration once:
+#     docker-compose -f docker-compose.demo.yml exec pata-api alembic upgrade head
+# ============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — primary persistence store
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: pata-demo-postgres
+    environment:
+      POSTGRES_DB: pata
+      POSTGRES_USER: pata_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pata_demo_pass}
+    volumes:
+      - pata-demo-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pata_app -d pata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Redis — distributed rate limiter, Overpass cache, circuit-breaker state
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: pata-demo-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - pata-demo-redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Pata API — backend service
+  # NOTE: start_period=120s to allow IndicBERT cold-load on CPU (60–90s).
+  # ---------------------------------------------------------------------------
+  pata-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pata-demo-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Auth
+      - PATA_API_KEYS=${PATA_API_KEYS:-pata_dev_key,pata_demo_key}
+      # Persistence
+      - PATA_DATABASE_URL=postgresql+psycopg2://pata_app:${POSTGRES_PASSWORD:-pata_demo_pass}@postgres:5432/pata
+      # Redis
+      - PATA_REDIS_URL=redis://redis:6379/0
+      # Data retention
+      - PATA_PURGE_INTERVAL_SEC=3600
+      # Pipeline — generous timeout for cold-start
+      - PATA_REQUEST_TIMEOUT_SEC=30.0
+      - PATA_HIGH_CONF=0.80
+      - PATA_MEDIUM_CONF=0.50
+      # LLM (set your key in .env or export before running compose)
+      - PATA_LLM_PROVIDER=${PATA_LLM_PROVIDER:-anthropic}
+      - PATA_LLM_MODEL=${PATA_LLM_MODEL:-claude-haiku-4-5}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Overpass
+      - PATA_OVERPASS_URL=${PATA_OVERPASS_URL:-https://overpass-api.de/api/interpreter}
+      - PATA_OVERPASS_CB_THRESHOLD=3
+      - PATA_OVERPASS_CB_COOLDOWN_SEC=60.0
+      # CORS — allow both frontend ports + API itself
+      - PATA_CORS_ORIGINS=http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:8000
+      # Webhook
+      - PATA_WEBHOOK_URL=${PATA_WEBHOOK_URL:-}
+      - PATA_WEBHOOK_SECRET=${PATA_WEBHOOK_SECRET:-changeme_demo}
+      # ── DEMO SAFETY NET ──────────────────────────────────────────────────
+      # Flip PATA_DEMO_MODE=0 to disable pre-recorded responses.
+      - PATA_DEMO_MODE=${PATA_DEMO_MODE:-1}
+    volumes:
+      - pata-demo-cache:/home/patauser/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Extended start_period: IndicBERT cold-load on CPU takes 60–90s
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # Resolution Playground — port 5173
+  # ---------------------------------------------------------------------------
+  pata-playground:
+    image: node:20-alpine
+    container_name: pata-demo-playground
+    working_dir: /app
+    volumes:
+      - ./frontend/playground:/app
+      - pata-playground-nm:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_API_KEY=${PATA_API_KEYS:-pata_dev_key}
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    depends_on:
+      pata-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Ops Review Dashboard — port 5174
+  # ---------------------------------------------------------------------------
+  pata-dashboard:
+    image: node:20-alpine
+    container_name: pata-demo-dashboard
+    working_dir: /app
+    volumes:
+      - ./frontend/review-dashboard:/app
+      - pata-dashboard-nm:/app/node_modules
+    ports:
+      - "5174:5174"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5174"
+    depends_on:
+      pata-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pata-demo-pgdata:
+  pata-demo-redisdata:
+  pata-demo-cache:
+  pata-playground-nm:
+  pata-dashboard-nm:
